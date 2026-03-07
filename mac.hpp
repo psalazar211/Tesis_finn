@@ -65,6 +65,57 @@
 
 #include "utils.hpp"
 
+ // ============================================================
+ // Multiplier selection (exact + 2 approximate examples)
+ // Set APPROX_MUL_MODE:
+ //   0 = exact (c*d)
+ //   1 = approximate: truncate K LSBs of product
+ //   2 = approximate: truncate KA/KB LSBs of operands before multiply
+ // ============================================================
+
+#ifndef APPROX_MUL_MODE
+#define APPROX_MUL_MODE 0
+#endif
+
+// For mode 1 (truncate product LSBs)
+#ifndef APPROX_TRUNC_PROD_K
+#define APPROX_TRUNC_PROD_K 2
+#endif
+
+// For mode 2 (truncate operands LSBs)
+#ifndef APPROX_TRUNC_A_K
+#define APPROX_TRUNC_A_K 1
+#endif
+#ifndef APPROX_TRUNC_B_K
+#define APPROX_TRUNC_B_K 1
+#endif
+
+template <typename TC, typename TD>
+auto approx_mul(TC const& c, TD const& d) -> decltype(c* d) {
+#pragma HLS inline
+#if (APPROX_MUL_MODE == 0)
+    // Exact
+    return c * d;
+
+#elif (APPROX_MUL_MODE == 1)
+    // Approx #1: truncate K LSBs of the product
+    auto p = c * d;
+    p = (p >> APPROX_TRUNC_PROD_K) << APPROX_TRUNC_PROD_K;
+    return p;
+
+#elif (APPROX_MUL_MODE == 2)
+    // Approx #2: truncate LSBs of operands before multiply
+    auto cc = c;
+    auto dd = d;
+    cc = (cc >> APPROX_TRUNC_A_K) << APPROX_TRUNC_A_K;
+    dd = (dd >> APPROX_TRUNC_B_K) << APPROX_TRUNC_B_K;
+    return cc * dd;
+
+#else
+#   error "Unsupported APPROX_MUL_MODE"
+#endif
+}
+
 
 /**
  * \brief      Multipliy operation between 2 operands, HLS choose the best resource
@@ -87,7 +138,7 @@
 template<typename TC, typename TD>
 auto mul(TC const &c, TD const &d, ap_resource_dflt const&) -> decltype(c*d) {
 #pragma HLS inline
-  auto  r = c*d;
+  auto r = approx_mul(c, d);
   return  r;
 }
 
@@ -112,7 +163,7 @@ auto mul(TC const &c, TD const &d, ap_resource_dflt const&) -> decltype(c*d) {
 template<typename TC, typename TD>
 auto mul(TC const &c, TD const &d, ap_resource_lut const&) -> decltype(c*d) {
 #pragma HLS inline
-  decltype(c*d) const  res = c*d;
+  decltype(c*d) const  res = approx_mul(c, d);
 #pragma HLS BIND_OP variable=res op=mul impl=fabric
   return  res;
 }
@@ -138,7 +189,7 @@ auto mul(TC const &c, TD const &d, ap_resource_lut const&) -> decltype(c*d) {
 template<typename TC, typename TD>
 auto mul(TC const &c, TD const &d, ap_resource_dsp const&) -> decltype(c*d) {
 #pragma HLS inline
-  decltype(c*d) const  res = c*d;
+  decltype(c*d) const res = approx_mul(c, d);
 #pragma HLS BIND_OP variable=res op=mul impl=dsp
   return  res;
 }
