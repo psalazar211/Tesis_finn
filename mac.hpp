@@ -64,7 +64,6 @@
 #define MAC_HPP
 
 #include "utils.hpp"
-#include <ap_bfloat16.h>
 
  // ============================================================
  // Multiplier selection (exact + 2 approximate examples)
