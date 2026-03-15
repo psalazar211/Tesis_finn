@@ -64,6 +64,7 @@
 #define MAC_HPP
 
 #include "utils.hpp"
+#include <ap_bfloat16.h>
 
  // ============================================================
  // Multiplier selection (exact + 2 approximate examples)
@@ -77,10 +78,6 @@
 #define APPROX_MUL_MODE 0
 #endif
 
-// For mode 1 (truncate product LSBs)
-#ifndef APPROX_TRUNC_PROD_K
-#define APPROX_TRUNC_PROD_K 2
-#endif
 
 // For mode 2 (truncate operands LSBs)
 #ifndef APPROX_TRUNC_A_K
@@ -98,10 +95,11 @@ auto approx_mul(TC const& c, TD const& d) -> decltype(c* d) {
     return c * d;
 
 #elif (APPROX_MUL_MODE == 1)
-    // Approx #1: truncate K LSBs of the product
-    auto p = c * d;
-    p = (p >> APPROX_TRUNC_PROD_K) << APPROX_TRUNC_PROD_K;
-    return p;
+    // Approx #1 (BFloat16): cast operands to bfloat16, multiply, return float
+    ap_bfloat16 cb = (ap_bfloat16)c;
+    ap_bfloat16 db = (ap_bfloat16)d;
+    ap_bfloat16 pb = cb * db;
+    return (decltype(c * d))pb;
 
 #elif (APPROX_MUL_MODE == 2)
     // Approx #2: truncate LSBs of operands before multiply
