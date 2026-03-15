@@ -78,7 +78,20 @@
 #define APPROX_MUL_MODE 0
 #endif
 
+//For mode 2 (BFLOAT16 ), the multiplier is implemented by casting the operands to bfloat16, multiplying, and returning the result as the original datatype. This effectively truncates the product to 8 bits of precision in the mantissa, which can save resources while still providing good accuracy for many applications.
+#include <ap_int.h>
 
+inline float float_to_bfloat16(float x) {
+#pragma HLS inline
+    union {
+        float f;
+        ap_uint<32> u;
+    } v;
+
+    v.f = x;
+    v.u &= 0xFFFF0000; // keep sign + exponent + 7 MSB mantissa
+    return v.f;
+}
 // For mode 2 (truncate operands LSBs)
 #ifndef APPROX_TRUNC_A_K
 #define APPROX_TRUNC_A_K 1
@@ -95,10 +108,10 @@ auto approx_mul(TC const& c, TD const& d) -> decltype(c* d) {
     return c * d;
 
 #elif (APPROX_MUL_MODE == 1)
-    // Approx #1 (BFloat16): cast operands to bfloat16, multiply, return float
-    ap_bfloat16 cb = (ap_bfloat16)c;
-    ap_bfloat16 db = (ap_bfloat16)d;
-    ap_bfloat16 pb = cb * db;
+    // Approx #1 (BFloat16 emulated)
+    float cb = float_to_bfloat16((float)c);
+    float db = float_to_bfloat16((float)d);
+    float pb = cb * db;
     return (decltype(c * d))pb;
 
 #elif (APPROX_MUL_MODE == 2)
