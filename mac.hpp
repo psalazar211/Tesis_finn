@@ -3,6 +3,9 @@
 
 #include "utils.hpp"
 #include <ap_int.h>
+#include <stdint.h>
+#include <string.h>
+
 
 // ============================================================
 // Multiplier selection (exact + approximate modes)
@@ -23,15 +26,17 @@
 // ------------------------------------------------------------
 inline float float_to_bfloat16(float x) {
 #pragma HLS inline
-    union {
-        float f;
-        ap_uint<32> u;
-    } v;
-    v.f = x;
-    v.u &= 0xFFFF0000;
-    return v.f;
-}
+    uint32_t u;
+    // Bitcast float -> u32 (sin union)
+    memcpy(&u, &x, sizeof(u));
 
+    // Truncar 16 LSB: deja signo + exponente + 7 MSB mantisa
+    u &= 0xFFFF0000u;
+
+    // Bitcast u32 -> float
+    memcpy(&x, &u, sizeof(x));
+    return x;
+}
 // ------------------------------------------------------------
 // 4:2 approximate compressors
 // ------------------------------------------------------------
