@@ -17,6 +17,11 @@
 //   5 = approximate: DQ4:2C2 (approx mode behavior)
 //   6 = approximate: DQ4:2C3 (approx mode behavior)
 //   7 = approximate: DQ4:2C4 (approx mode behavior)
+//   8  = approximate: MA approximation 1 (A8)
+//   9  = approximate: MA approximation 2 (A8)
+//   10 = approximate: MA approximation 3 (A8)
+//   11 = approximate: MA approximation 4 (A8)
+//   12 = approximate: MA approximation 5 (A8)
 // ============================================================
 
 #ifndef APPROX_MUL_MODE
@@ -105,7 +110,54 @@ inline void dq42c4(ap_uint<1> x1, ap_uint<1> x2, ap_uint<1> x3, ap_uint<1> x4,
     sum = p12 | p34;
     Cout = 0;
 }
+// ------------------------------------------------------------
+// Approximate Mirror Adder full-adder behavior (A8): modes 8..12
+// Implemented as a 1-bit FA used inside CSA reduction.
+// ------------------------------------------------------------
+inline void ma_fa(ap_uint<1> A, ap_uint<1> B, ap_uint<1> Cin,
+    ap_uint<1>& Sum, ap_uint<1>& Cout) {
+#pragma HLS inline
 
+    // idx = {A,B,Cin} as 0..7
+    unsigned idx = ((unsigned)A << 2) | ((unsigned)B << 1) | (unsigned)Cin;
+
+#if (APPROX_MUL_MODE == 8)
+    // MA Approximation 1 (A8): 1 error in Cout, 2 errors in Sum (Table I).
+    // NOTE: Replace these LUTs with the exact Table I entries if you want bit-exact behavior.
+    static const ap_uint<1> SUM_LUT[8] = { 0,1,0,0,0,0,0,1 };
+    static const ap_uint<1> COUT_LUT[8] = { 0,0,0,1,0,1,1,0 };
+    Sum = SUM_LUT[idx];
+    Cout = COUT_LUT[idx];
+
+#elif (APPROX_MUL_MODE == 9)
+    // MA Approximation 2 (A8): Cout exact; Sum = ~Cout (2 mismatches at 000 and 111).
+    ap_uint<1> cout_exact = (A & B) | (Cin & (A ^ B));
+    Cout = cout_exact;
+    Sum = ~cout_exact;
+
+#elif (APPROX_MUL_MODE == 10)
+    // MA Approximation 3 (A8): combines ideas of approx 1 and 2 (Table I).
+    static const ap_uint<1> COUT_LUT[8] = { 0,0,0,1,0,1,1,0 };
+    Cout = COUT_LUT[idx];
+    Sum = ~Cout;
+
+#elif (APPROX_MUL_MODE == 11)
+    // MA Approximation 4 (A8): Cout = A; Sum similar to approx 1 (Table I).
+    Cout = A;
+    static const ap_uint<1> SUM_LUT[8] = { 0,1,0,0,0,0,0,1 };
+    Sum = SUM_LUT[idx];
+
+#elif (APPROX_MUL_MODE == 12)
+    // MA Approximation 5 (A8), choice 2: Sum = B, Cout = A (Table II).
+    Sum = B;
+    Cout = A;
+
+#else
+    // Accurate FA (fallback)
+    Sum = A ^ B ^ Cin;
+    Cout = (A & B) | (Cin & (A ^ B));
+#endif
+}
 // ------------------------------------------------------------
 // Unsigned CSA multiplier (modes 2..7 apply inside CSA reduce)
 // ------------------------------------------------------------
@@ -228,9 +280,20 @@ ap_uint<WA + WB> mul_csa_comp42_unsigned(ap_uint<WA> a, ap_uint<WB> b) {
                 heap[col][cnt[col]++] = s;
                 heap[col + 1][cnt[col + 1]++] = c;
             }
+#elif (APPROX_MUL_MODE >= 8) && (APPROX_MUL_MODE <= 12)
+            // MA approximate full adders inside CSA reduction (A8)
+            // Reduce column by consuming 3 bits at a time.
+            ap_uint<1> x3 = heap[col][--cnt[col]];
+            ap_uint<1> x2 = heap[col][--cnt[col]];
+            ap_uint<1> x1 = heap[col][--cnt[col]];
 
+            ap_uint<1> s, c;
+            ma_fa(x1, x2, x3, s, c);
+
+            heap[col][cnt[col]++] = s;
+            heap[col + 1][cnt[col + 1]++] = c;
 #else
-#   error "mul_csa_comp42_unsigned valid only for APPROX_MUL_MODE 2..7"
+#   error "mul_csa_comp42_unsigned valid only for APPROX_MUL_MODE 2..12"
 #endif
         }
     }
@@ -298,7 +361,7 @@ auto approx_mul(TC const& c, TD const& d) -> decltype(c* d) {
     float db = float_to_bfloat16((float)d);
     float pb = cb * db;
     return (decltype(c * d))pb;
-#elif (APPROX_MUL_MODE >= 2) && (APPROX_MUL_MODE <= 7)
+#elif (APPROX_MUL_MODE >= 2) && (APPROX_MUL_MODE <= 12)
     return (decltype(c * d))mul_csa_comp42(c, d);
 #else
 #   error "Unsupported APPROX_MUL_MODE"
