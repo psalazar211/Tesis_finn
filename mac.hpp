@@ -293,7 +293,17 @@ ap_uint<WA + WB> mul_csa_comp42_unsigned(ap_uint<WA> a, ap_uint<WB> b) {
             heap[col][cnt[col]++] = s;
             heap[col + 1][cnt[col + 1]++] = c;
 #else
-#   error "mul_csa_comp42_unsigned valid only for APPROX_MUL_MODE 2..12"
+            // Fallback exact reduction (so modes 0/1 compile cleanly):
+            // consume 3 bits -> exact FA -> push sum in same col, carry in col+1
+            ap_uint<1> x3 = heap[col][--cnt[col]];
+            ap_uint<1> x2 = heap[col][--cnt[col]];
+            ap_uint<1> x1 = heap[col][--cnt[col]];
+
+            ap_uint<1> s = x1 ^ x2 ^ x3;
+            ap_uint<1> c = (x1 & x2) | (x1 & x3) | (x2 & x3);
+
+            heap[col][cnt[col]++] = s;
+            heap[col + 1][cnt[col + 1]++] = c;
 #endif
         }
     }
