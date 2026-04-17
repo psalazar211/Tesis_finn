@@ -259,6 +259,7 @@ ap_uint<WA + WB> mul_csa_comp42_unsigned(ap_uint<WA> a, ap_uint<WB> b) {
                 ap_uint<1> s, c, co;
 
 #if (APPROX_MUL_MODE == 4)
+                #warning "DQ4:2C1 ACTIVE"
                 dq42c1(x1, x2, x3, x4, s, c, co);
 #elif (APPROX_MUL_MODE == 5)
                 dq42c2(x1, x2, x3, x4, s, c, co);
